@@ -1,0 +1,16 @@
+- name: Set host name
+  become: true
+  ansible.builtin.hostname:
+    name: "{{ setup_hostname }}"
+  notify:
+    - Hostname changed
+
+- name: Set hostname for loopback
+  become: true
+  ansible.builtin.lineinfile:
+    dest: /etc/hosts
+    regexp: '^127\.0\.1\.1'
+    line: "127.0.1.1 {{ setup_hostname }}.local {{ setup_hostname }}"
+    state: present
+  notify:
+    - Hostname changed

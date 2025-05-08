@@ -1,0 +1,37 @@
+# - name: List ssh services
+#   ansible.builtin.shell: systemctl list-units --type=service ssh* --output json
+#   register: ssh_service
+#   changed_when: false
+#   tags:
+#     - skip_ansible_lint
+
+# - name: SSH service name initial value
+#   ansible.builtin.set_fact:
+#     ssh_service_name: null
+
+# - name: Set ssh service name
+#   ansible.builtin.set_fact:
+#     ssh_service_name: "{{
+#       item
+#       if (ssh_service.stdout | from_json | json_query('[?contains(unit, `' + item + '`)] | [0].unit')) != None
+#       else ssh_service_name }}"
+#   loop:
+#     - ssh.service
+#     - sshd.service
+
+# # - name: Test
+# #   ansible.builtin.debug:
+# #     msg:
+# #       - "{{ ssh_service_name }}"
+# #       - "{{ ssh_service }}"
+
+# - name: Fail if no ssh service found
+#   ansible.builtin.fail:
+#     msg: "No SSH service found in systemd!"
+#   when: ssh_service_name == None
+
+- name: Restart SSH service
+  become: true
+  ansible.builtin.service:
+    name: "{{ ssh_service_name }}"
+    state: restarted

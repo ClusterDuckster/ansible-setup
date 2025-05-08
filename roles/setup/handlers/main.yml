@@ -1,0 +1,6 @@
+- name: Restart sshd
+  ansible.builtin.include_tasks: restart_sshd.yml
+
+- name: Hostname changed
+  ansible.builtin.debug:
+    msg: Dummy for other roles to listen to it

@@ -1,0 +1,26 @@
+{
+    "emmet.includeLanguages": {"jinja-html": "html", "jinja-properties": "properties"},
+    "files.associations": {
+        "*.yml": "ansible",
+        "*.html.j2": "jinja-html",
+        "*.conf.j2": "jinja-properties",
+        "*.local.j2": "jinja-properties",
+        "*.env.j2": "jinja-properties",
+    },
+    "files.trimTrailingWhitespace": true,
+    "files.insertFinalNewline": true,
+    "files.trimFinalNewlines": true,
+    "editor.insertSpaces": false,
+    "editor.tabSize": 4,
+    "[yaml][jinja-yaml]": {
+        "editor.insertSpaces": true,
+        "editor.tabSize": 2
+    },
+    "yaml.schemas": {
+        "https://raw.githubusercontent.com/ansible/ansible-lint/main/src/ansiblelint/schemas/vars.json": [
+            "vault.yml",
+            "vars.yml"
+        ]
+    },
+    "ansible.python.interpreterPath": "/usr/bin/python3",
+}

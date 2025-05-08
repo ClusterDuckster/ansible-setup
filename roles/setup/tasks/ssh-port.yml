@@ -1,0 +1,159 @@
+- name: Ping is working (Port config will be skipped if success)
+  ansible.builtin.wait_for_connection:
+    timeout: 5
+  ignore_errors: true
+  check_mode: false
+  register: ping
+
+- name: Could not ping regularly -> still needs config
+  when: ping.failed
+  check_mode: false
+  block:
+    - name: Check if we're using the configured SSH port
+      ansible.builtin.wait_for:
+        port: "{{ ansible_port }}"
+        state: "started"
+        host: "{{ ansible_host }}"
+        search_regex: OpenSSH
+        timeout: 5
+      connection: local
+      ignore_errors: true
+      register: configured_ssh
+
+    # - name: Check if we're using the configured SSH port
+    #   ansible.builtin.ping:
+    #     data: success
+    #   register: configured_ssh
+
+    - name: Check port 22 and change if reachable
+      when: configured_ssh.failed
+      block:
+        # From localhost, check if we're able to reach {{ inventory_hostname }} on port 22
+        # EDIT Olli: seems not to work anymore??
+        # - name: Check if we're using ssh port 22 (default)
+        #   ansible.builtin.wait_for:
+        #     port: "22"
+        #     state: "started"
+        #     host: "{{ inventory_host }}"
+        #     connect_timeout: "5"
+        #     timeout: "10"
+        #   delegate_to: "localhost"
+        #   register: default_ssh
+        #   debugger: always
+
+        - name: Check if we're using ssh port 22 (default)
+          ansible.builtin.shell: "ssh -p 22 -o BatchMode=yes -o ConnectTimeout=5 {{ inventory_hostname }}"
+          delegate_to: localhost
+          register: default_ssh
+          changed_when: false
+          ignore_errors: true
+          tags:
+            - skip_ansible_lint
+
+        - name: Fail if not open
+          ansible.builtin.fail:
+            msg: Neither the configured port nor port 22 are open on the host
+          when: default_ssh.stderr.find('Connection timed out') != -1
+
+        # If reachable, continue the following tasks with this port
+        - name: Set inventory ansible_port to 22
+          ansible.builtin.set_fact:
+            setup_original_ansible_port: "{{ ansible_port }}"
+            ansible_port: "22"
+          register: ssh_port_set
+
+    # Could be root or the configured username. Depends on the progress of the configuration
+    # The check makes this playbook rerunnable at any state
+    - name: Try given users
+      ansible.builtin.shell: |
+        SSHPASS='{{ item.password }}' sshpass -e ssh \
+        -o User={{ item.username }} \
+        -o ConnectTimeout=10 \
+        {{ '-o PubkeyAuthentication=no' if item.private_key is not defined else '-i ' + item.private_key }} \
+        {{ ansible_host }} -p {{ ansible_port }} \
+        /bin/true
+      register: result
+      connection: local
+      ignore_errors: true
+      changed_when: false
+      loop:
+        - username: "{{ setup_user_name }}"
+          password: "{{ setup_user_password }}"
+          private_key: '~/.ssh/id_rsa-ansiblevmv3'
+        - username: "{{ setup_root_name }}"
+          password: "{{ setup_root_password }}"
+          private_key: '~/.ssh/id_rsa-ansiblevmv3'
+        - username: "{{ setup_user_name }}"
+          password: "{{ setup_user_password }}"
+        - username: "{{ setup_root_name }}"
+          password: "{{ setup_root_password }}"
+      # no_log: true
+
+    - name: Fail if no user could connect
+      ansible.builtin.fail:
+        msg: "None of the given users could connect. Forgot to update password in ansible-vault?"
+      when: (result.results | rejectattr('failed', 'equalto', true) | list | length) == 0
+
+    - name: Set successfull user
+      ansible.builtin.set_fact:
+        ansible_user: "{{ (result.results | rejectattr('failed', 'equalto', true) | first).item.username }}"
+        ansible_password: "{{ (result.results | rejectattr('failed', 'equalto', true) | first).item.password }}"
+        ansible_become_pass: "{{ (result.results | rejectattr('failed', 'equalto', true) | first).item.password }}"
+
+    # Sanity check, make sure Ansible is able to connect to the host
+    # - name: Confirm host connection works
+    #   ansible.builtin.ping:
+
+    # - name: Set inventory ansible_port back to configured
+    #     ansible.builtin.set_fact:
+    #       ansible_port: "{{ configured_port }}"
+
+- name: Configured SSH port in sshd_config
+  become: true
+  ansible.builtin.lineinfile:
+    dest: "/etc/ssh/sshd_config"
+    regexp: "^Port"
+    line: "Port {{ configured_port }}"
+  register: sshd_port
+  notify:
+    - Restart sshd
+
+- name: Update known_hosts
+  ansible.builtin.known_hosts:
+    name: "[{{ ansible_host }}]:{{ configured_port }}"
+    key: "[{{ ansible_host }}]:{{ configured_port }} {{ ssh_keyscan.stdout.split(' ')[1:] | join(' ') }}"
+    state: present
+  delegate_to: localhost
+  when: sshd_port.changed
+  tags:
+    - skip_ansible_lint
+
+# - name: Set ansible_port to correct value
+#   ansible.builtin.set_fact:
+#     ansible_port: "{{ configured_port }}"
+#   when: ping.failed and configured_ssh.failed
+
+# - name: Test
+#   vars:
+#     testmich: teststetsetsetsetset
+#     ports: "{{ ([setup_original_ansible_port] + [] if ssh_additional_ports is not defined else ssh_additional_ports) }}"
+#   ansible.builtin.debug:
+#     msg:
+#       setup_original_ansible_port: "{{ setup_original_ansible_port }}"
+#       ssh_additional_ports: "{{ ssh_additional_ports }}"
+#       testmich: "{{ testmich }}"
+#       ports: "{{ [setup_original_ansible_port] + ([] if ssh_additional_ports is not defined else ssh_additional_ports) }}"
+#       ports_var: "{{ ports }}"
+#       block: "{{ ['Port '] | product(ports) | map('join') | list | join('\n') }}"
+
+# - name: All ports for SSH set
+#   become: true
+#   # debugger: always
+#   vars:
+#     ports: "{{ [setup_original_ansible_port] + ([] if ssh_additional_ports is not defined else ssh_additional_ports) }}"
+#   ansible.builtin.blockinfile:
+#     marker: "# {mark} Ports Block - Ansible managed"
+#     dest: /etc/ssh/sshd_config
+#     block: "{{ ['Port '] | product(ports) | map('join') | list | join('\n') }}"
+#   notify:
+#     - Restart sshd

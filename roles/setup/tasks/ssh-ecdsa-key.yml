@@ -1,0 +1,100 @@
+# - name: Debug
+#   ansible.builtin.debug:
+#     msg: "{{ ansible_play_hosts }}"
+
+# - name: Check if configured port is already active
+#   ansible.builtin.wait_for:
+#     port: "{{ ansible_port }}"
+#     state: "started"
+#     host: "{{ ansible_host }}"
+#     connect_timeout: "5"
+#     timeout: "10"
+#   ignore_errors: "yes"
+#   register: configured_ssh
+
+# - name: Debug
+#   ansible.builtin.debug:
+#     msg: "{{ configured_ssh }}"
+
+- name: Remember current host
+  ansible.builtin.set_fact:
+    current_host: "{{ ansible_host }}"
+    current_port: "{{ ansible_port }}"
+
+- name: Ssh keyscan configured port
+  ansible.builtin.shell: "set -o pipefail && ssh-keyscan -p {{ current_port }} {{ current_host }} | grep -E '^{{ current_host }}'"
+  args:
+    executable: /usr/bin/bash
+  register: ssh_keyscan
+  ignore_errors: true
+  changed_when: false
+  delegate_to: localhost
+  check_mode: false
+
+- name: Show keyscan output
+  ansible.builtin.debug:
+    msg: "{{ ssh_keyscan.stdout_lines }}"
+  check_mode: true
+
+- name: Use port 22
+  when: ssh_keyscan.failed
+  block:
+    - name: Set current port to 22
+      ansible.builtin.set_fact:
+        current_port: 22
+
+    - name: Ssh keyscan port 22
+      ansible.builtin.shell: "set -o pipefail && ssh-keyscan -p {{ current_port }} {{ current_host }} | grep -E '^{{ current_host }}'"
+      args:
+        executable: /usr/bin/bash
+      register: ssh_keyscan_22
+      changed_when: false
+      delegate_to: localhost
+
+    - name: Set current port to 22
+      ansible.builtin.set_fact:
+        ssh_keyscan: "{{ ssh_keyscan_22 }}"
+
+# - name: Debug
+#   ansible.builtin.debug:
+#     msg: "{{ ssh_keyscan }}"
+
+- name: Check for changed keys in known_hosts
+  ansible.builtin.known_hosts:
+    name: "{{ ssh_keyscan.stdout.split(' ')[0] }}"
+    key: "{{ ssh_keyscan.stdout }}"
+    state: present
+  register: add_known_hosts
+  delegate_to: localhost
+  check_mode: true
+  diff: true
+
+- name: Handle change of host key
+  when: add_known_hosts.changed
+  tags:
+    - skip_ansible_lint
+  block:
+    - name: Ask if change of host key expected
+      ansible.builtin.pause:
+        prompt: "WARNING: Host keys have changed, will replace current with new ones. (enter for confirm, ctrl+c to abort)"
+      register: confirmation
+      tags:
+        - skip_ansible_lint
+      delegate_to: localhost
+
+    - name: Remove all keys of host
+      ansible.builtin.known_hosts:
+        name: "{{ item }}"
+        state: absent
+      delegate_to: localhost
+      loop:
+        - "{{ current_host }}"
+        - "[{{ current_host }}]:{{ current_port }}"
+
+    - name: Add keys to known_hosts
+      ansible.builtin.known_hosts:
+        name: "{{ current_host }}"
+        key: "{{ item }}"
+        state: present
+      delegate_to: localhost
+      loop: "{{ ssh_keyscan.stdout_lines }}"

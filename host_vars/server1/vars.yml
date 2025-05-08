@@ -1,0 +1,5 @@
+root_name: "{{ vault_root_name }}"
+root_password: "{{ vault_root_password }}"
+user_name: "{{ vault_user_name }}"
+user_password: "{{ vault_user_password }}"
+user_salt: "{{ vault_user_salt }}"

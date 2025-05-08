@@ -1,0 +1,32 @@
+- name: Disable root login over SSH
+  become: true
+  ansible.builtin.lineinfile:
+    dest: /etc/ssh/sshd_config
+    regexp: "{{ item.regex }}"
+    line: "{{ item.line }}"
+  loop:
+    - comment: "Disable root login"
+      regex: "^PermitRootLogin"
+      line: "PermitRootLogin no"
+    - comment: "Disable login with password"
+      regex: "^PasswordAuthentication"
+      line: "PasswordAuthentication no"
+    - comment: "Allow ipv6"
+      regex: "^AddressFamily"
+      line: "AddressFamily any"
+    - comment: "TCP forwarding needed for vscode server for port forwarding"
+      regex: "^AllowTcpForwarding"
+      line: "AllowTcpForwarding yes"
+  notify:
+    - Restart sshd
+
+- name: Listen for ssh connections on ipv4 and ipv6
+  become: true
+  ansible.builtin.blockinfile:
+    marker: "# {mark} Ollis setup role - Ansible managed"
+    dest: /etc/ssh/sshd_config
+    block: |
+      ListenAddress 0.0.0.0:{{ configured_port }}
+      ListenAddress [::]:{{ configured_port }}
+  notify:
+    - Restart sshd

@@ -1,0 +1,25 @@
+#!/bin/sh
+#
+# An example hook script to verify what is about to be committed.
+# Called by "git commit" with no arguments.  The hook should
+# exit with non-zero status after issuing an appropriate message if
+# it wants to stop the commit.
+
+# Find all changed files for this commit
+# Compute the diff only once to save a small amount of time.
+changed_files=$(git diff --name-only --cached --diff-filter=ACMR)
+changed_vault_files=$(echo "$changed_files" | { grep "/vault" || true; })
+
+if [ ! "$changed_vault_files" ]; then
+    exit 0
+fi
+for file in $changed_vault_files; do
+    file_is_encryped=$(sed -n '/^$ANSIBLE_VAULT/p;q' "$file")
+    if [ ! "$file_is_encryped" ]; then
+        echo "Unencrypted vault file found: $file"
+        ansible-vault encrypt $file
+        git add $file
+        ansible-vault decrypt $file
+        echo "Successfully added the encrypted file and decrypted the file again."
+    fi
+done

@@ -1,0 +1,5 @@
+# yamllint disable rule:line-length
+all_authorized_keys:
+  - name: ansible_vm
+    pub_key: ssh-rsa <PUBLIC SSH KEY> myuser@ansible-vm
+# yamllint enable rule:line-length

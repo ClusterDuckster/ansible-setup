@@ -1,0 +1,7 @@
+[diff "ansible-vault"]
+    textconv = "sh ./ansible-vault-view.sh"
+    cachetextconv = false
+
+[filter "ansible-vault"]
+    clean = "sh ./ansible-vault-view.sh"
+    smudge = "sh ./ansible-vault-view.sh"

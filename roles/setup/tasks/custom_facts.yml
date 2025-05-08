@@ -1,0 +1,28 @@
+- name: Ensure ansible facts folder
+  become: true
+  ansible.builtin.file:
+    path: /etc/ansible/facts.d
+    state: directory
+    owner: "{{ setup_user_name }}"
+    group: "{{ setup_user_name }}"
+    mode: '0775'
+
+- name: Get uid
+  ansible.builtin.getent:
+    database: passwd
+    key: "{{ setup_user_name }}"
+  when: getent_passwd[setup_user_name].1 is not defined
+  ignore_errors: "{{ ansible_check_mode }}" # no way to know uid in check mode when user is not created
+
+# This makes the uid fact available for later roles / plays
+- name: Ensure uid fact
+  ansible.builtin.copy:
+    dest: /etc/ansible/facts.d/uid.fact
+    content: |
+      #!/bin/bash
+      facts='{"uid": "{{ getent_passwd[setup_user_name].1 }}"}'
+      echo $facts
+    owner: "{{ setup_user_name }}"
+    group: "{{ setup_user_name }}"
+    mode: '0775'
+  ignore_errors: "{{ ansible_check_mode }}"

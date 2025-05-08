@@ -1,0 +1,6 @@
+setup_original_ansible_port: "{{ ansible_port }}"
+setup_hostname: "{{ inventory_hostname }}"
+
+setup_user_home_dir: "/home/{{ setup_user_name }}"
+
+setup_authorized_keys: []

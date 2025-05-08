@@ -1,0 +1,14 @@
+- name: Ensure general needed packages are installed
+  become: true
+  ansible.builtin.apt:
+    name:
+      - python3
+      - python3-pip
+    update_cache: true
+
+- name: Ensure additional packages if given
+  become: true
+  when: setup_addional_packages is defined
+  ansible.builtin.apt:
+    name: "{{ setup_addional_packages }}"
+    update_cache: true

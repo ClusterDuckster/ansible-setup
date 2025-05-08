@@ -1,0 +1,2 @@
+# or *.vault.yml, or *-vault.yml, or whatever convention you use for vaults
+vault.yml diff=ansible-vault merge=binary

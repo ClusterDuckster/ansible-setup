@@ -1,0 +1,92 @@
+- name: Check ssh on user with pubkey already working
+  ansible.builtin.command: "ssh -o BatchMode=yes -o ConnectTimeout=5 {{ setup_user_name }}@{{ ansible_host }} -p {{ ansible_port }}"
+  register: pubkey_connection
+  connection: local
+  ignore_errors: true
+  changed_when: false
+
+# Could be root or the configured username with password authentication. Depends on the progress of the configuration
+# The check makes this playbook rerunnable at any state
+- name: User password check
+  when: pubkey_connection.failed
+  block:
+    - name: Try given users
+      ansible.builtin.shell: |
+        SSHPASS='{{ item.password }}' sshpass -e ssh \
+        -o User={{ item.username }} \
+        -o ConnectTimeout=10 \
+        {{ '-o PubkeyAuthentication=no' if item.private_key is not defined else '-i ' + item.private_key }} \
+        {{ ansible_host }} -p {{ ansible_port }} \
+        /bin/true
+      register: result
+      connection: local
+      ignore_errors: true
+      changed_when: false
+      loop:
+        - username: "{{ setup_user_name }}"
+          password: "{{ setup_user_password }}"
+        - username: "{{ setup_root_name }}"
+          password: "{{ setup_root_password }}"
+        - username: "{{ setup_root_name }}"
+          password: "{{ setup_root_password }}"
+          private_key: '~/.ssh/id_rsa-ansiblevmv3'
+      no_log: true
+
+    - name: Fail if no user could connect
+      ansible.builtin.fail:
+        msg: "None of the given users could connect. Forgot to update password in ansible-vault?"
+      when: (result.results | rejectattr('failed', 'equalto', true) | list | length) == 0
+
+    - name: Set successfull user
+      ansible.builtin.set_fact:
+        ansible_user: "{{ (result.results | rejectattr('failed', 'equalto', true) | first).item.username }}"
+        ansible_password: "{{ (result.results | rejectattr('failed', 'equalto', true) | first).item.password }}"
+
+- name: Create user
+  become: true
+  ansible.builtin.user:
+    name: "{{ setup_user_name }}"
+    # python3 -c "from getpass import getpass; from crypt import *; p=getpass();
+    # print('\n'+crypt(p, METHOD_SHA512)) if p==getpass('Please repeat: ') else print('\nFailed repeating.')"
+    # This will use a random salt. Structure is "$<id>$<salt>$<hash>". id 6 stands for SHA-512
+    # alternative: openssl passwd -6 -salt xyz  yourpass
+    password: "{{ setup_user_password | password_hash('sha512', setup_user_salt) }}"
+    append: true
+    groups:
+      - sudo
+      - adm
+      - mail
+    state: present
+    home: "{{ setup_user_home_dir }}"
+    shell: /bin/bash
+    # system: no                    # Defaults to no
+    # createhome: yes                # Defaults to yes
+    # home: /home/clusterduckster   # Defaults to /home/<username>
+
+- name: Sudo installed
+  become: true
+  ansible.builtin.apt:
+    package:
+      - sudo
+
+- name: Allow 'sudo' group to have passwordless sudo
+  become: true
+  ansible.builtin.lineinfile:
+    dest: /etc/sudoers
+    state: present
+    create: true
+    mode: '0440'
+    regexp: '^%sudo'
+    line: '%sudo ALL=(ALL) NOPASSWD: ALL'
+    validate: 'visudo -cf %s'
+
+- name: Authorize all ssh keys in .ssh folder
+  ansible.posix.authorized_key:
+    user: "{{ setup_user_name }}"
+    path: "{{ setup_user_home_dir }}/.ssh/authorized_keys"
+    state: present
+    manage_dir: true
+    key: "{{ item.pub_key }}"
+  loop: "{{ setup_authorized_keys }}"
+  notify:
+    - Restart sshd

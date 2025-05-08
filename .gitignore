@@ -1,0 +1,16 @@
+# ---> Ansible
+*.retry
+hosts
+hosts.yml
+.ansible
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+indexer
+deprecated
+
+# will install ansible-galaxy roles here
+external-roles/*

@@ -1,0 +1,25 @@
+- name: Keep original configured SSH port around
+  ansible.builtin.set_fact:
+    configured_port: "{{ ansible_port }}"
+
+- name: Check ecdsa keys for security
+  ansible.builtin.import_tasks: ssh-ecdsa-key.yml
+- name: SSH Port for ansible connection
+  ansible.builtin.import_tasks: ssh-port.yml
+
+- name: Ensure base packages
+  ansible.builtin.import_tasks: packages.yml
+- name: SSH systemd settings
+  ansible.builtin.import_tasks: ssh-systemd.yml
+- name: User and permissions
+  ansible.builtin.import_tasks: user.yml
+- name: Configure SSH server
+  ansible.builtin.import_tasks: ssh-sshd_config.yml
+
+- name: Ensure hostname up to date
+  ansible.builtin.import_tasks: hostname.yml
+
+- name: Ensure custom facts
+  ansible.builtin.import_tasks: custom_facts.yml
+- name: Gather facts
+  ansible.builtin.setup:

@@ -1,0 +1,16 @@
+---
+- name: Setting up my servers
+  hosts:
+    - my_servers
+  gather_facts: false
+  roles:
+    - role: setup
+      setup_root_name: "{{ root_name }}"
+      setup_root_password: "{{ root_password }}"
+      setup_user_name: "{{ user_name }}"
+      setup_user_password: "{{ user_password }}"
+      setup_user_salt: "{{ user_salt }}"
+      setup_authorized_keys: "{{ all_authorized_keys }}"
+      setup_addional_packages:
+        - htop
+      tags: setup

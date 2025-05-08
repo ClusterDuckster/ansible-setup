@@ -1,0 +1,3 @@
+---
+- name: Setup all machines
+  ansible.builtin.import_playbook: sub-setup.yml
